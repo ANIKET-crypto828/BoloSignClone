@@ -1,26 +1,45 @@
 import { useState } from 'react';
 
+interface FileUploaderProps {
+  onFileUpload: (result: any) => void;
+}
+
+interface ImageFieldInputProps {
+  field: {
+    id: string;
+    label?: string;
+    required?: boolean;
+  };
+  onImageUpload: (fieldId: string, dataUrl: string) => void;
+}
+
+interface UploadedDocument {
+  documentId: string;
+  pageCount: number;
+  fileSize: number;
+}
+
 // FileUploader Component
-function FileUploader({ onFileUpload }) {
+function FileUploader({ onFileUpload }: FileUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const handleDragOver = (e) => {
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
   };
 
-  const handleDragLeave = (e) => {
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
   };
 
-  const handleDrop = async (e) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
 
     const files = Array.from(e.dataTransfer.files);
-    const pdfFile = files.find(file => file.type === 'application/pdf');
+    const pdfFile = files.find((file: File) => file.type === 'application/pdf');
 
     if (pdfFile) {
       await uploadFile(pdfFile);
@@ -29,7 +48,7 @@ function FileUploader({ onFileUpload }) {
     }
   };
 
-  const handleFileSelect = async (e) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type === 'application/pdf') {
       await uploadFile(file);
@@ -38,7 +57,7 @@ function FileUploader({ onFileUpload }) {
     }
   };
 
-  const uploadFile = async (file) => {
+  const uploadFile = async (file: File) => {
     setUploading(true);
     try {
       const formData = new FormData();
@@ -120,15 +139,15 @@ function FileUploader({ onFileUpload }) {
 }
 
 // ImageFieldInput Component (for signer mode)
-function ImageFieldInput({ field, onImageUpload }) {
-  const [preview, setPreview] = useState(null);
+function ImageFieldInput({ field, onImageUpload }: ImageFieldInputProps) {
+  const [preview, setPreview] = useState<string | null>(null);
 
-  const handleFileSelect = (e) => {
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        const dataUrl = reader.result;
+        const dataUrl = reader.result as string;
         setPreview(dataUrl);
         onImageUpload(field.id, dataUrl);
       };
@@ -208,17 +227,17 @@ function ImageFieldInput({ field, onImageUpload }) {
 
 // Demo Component
 export default function App() {
-  const [mode, setMode] = useState('upload');
-  const [uploadedDoc, setUploadedDoc] = useState(null);
+  const [mode, setMode] = useState<'upload' | 'image'>('upload');
+  const [uploadedDoc, setUploadedDoc] = useState<UploadedDocument | null>(null);
 
-  const handleFileUpload = (result) => {
+  const handleFileUpload = (result: UploadedDocument) => {
     console.log('File uploaded:', result);
     setUploadedDoc(result);
     alert(`PDF uploaded successfully!\nDocument ID: ${result.documentId}\nPages: ${result.pageCount}`);
   };
 
-  const handleImageUpload = (fieldId, dataUrl) => {
-    console.log('Image uploaded for field:', fieldId);
+  const handleImageUpload = (fieldId: string, dataUrl: string) => {
+    console.log('Image uploaded for field:', fieldId, 'Data URL length:', dataUrl.length);
   };
 
   // Mock image field for demo
@@ -321,3 +340,5 @@ export default function App() {
     </div>
   );
 }
+
+export { FileUploader, ImageFieldInput };

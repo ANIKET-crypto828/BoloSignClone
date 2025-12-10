@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import PDFEditor from './components/PDFEditor';
 import PDFSigner from './components/PDFSigner';
-import FileUploader from './components/FileUploader';
+import { FileUploader } from './components/FileUploader';
 import DocumentSelector from './components/DocumentSelector';
 
 function App() {

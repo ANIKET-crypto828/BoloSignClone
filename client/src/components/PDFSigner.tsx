@@ -24,11 +24,9 @@ const PAGE_WIDTH = 800;
 
 // Image Field Input Component
 function ImageFieldInput({ 
-  field, 
   value, 
   onChange 
 }: { 
-  field: DocumentField; 
   value: string; 
   onChange: (value: string) => void;
 }) {
@@ -370,7 +368,6 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
             
             {field.field_type === 'image' && (
               <ImageFieldInput
-                field={field}
                 value={fieldValues[field.id]?.value as string || ''}
                 onChange={(value) => handleFieldChange(field.id, value)}
               />
