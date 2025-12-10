@@ -1,4 +1,3 @@
-// Load environment variables FIRST
 require('dotenv').config();
 
 const express = require('express');
@@ -9,6 +8,9 @@ const cors = require('cors');
 const multer = require('multer');
 const fs = require('fs').promises;
 const path = require('path');
+const { promisify } = require('util');
+const { pipeline } = require('stream');
+const streamPipeline = promisify(pipeline);
 
 const app = express();
 app.use(cors());
@@ -33,7 +35,10 @@ const DocumentSchema = new mongoose.Schema({
     page: Number
   }],
   signedPdfPath: String,
-  originalPdfUrl: String, // NEW: Store the original URL
+  originalPdfUrl: String,
+  fileName: String,          // NEW: Original file name
+  fileSize: Number,          // NEW: File size in bytes
+  pageCount: Number,         // NEW: Number of pages
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -57,6 +62,34 @@ const DocumentFieldSchema = new mongoose.Schema({
 
 const Document = mongoose.model('Document', DocumentSchema);
 const DocumentField = mongoose.model('DocumentField', DocumentFieldSchema);
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: async (req, file, cb) => {
+    const uploadDir = path.join(__dirname, 'uploaded-pdfs');
+    await fs.mkdir(uploadDir, { recursive: true });
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+    const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    cb(null, `${uniqueSuffix}-${sanitizedName}`);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'));
+    }
+  }
+});
 
 // ============================================
 // MongoDB Atlas Connection Configuration
@@ -197,6 +230,254 @@ async function getPdfBuffer(pdfId, pdfUrl) {
 // ============================================
 // Document Field API Routes
 // ============================================
+
+// POST /upload-pdf - Upload a new PDF document
+app.post('/upload-pdf', upload.single('pdf'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No PDF file uploaded' });
+    }
+
+    const file = req.file;
+    console.log(`📤 Uploading PDF: ${file.originalname} (${(file.size / 1024).toFixed(2)} KB)`);
+
+    // Read the uploaded PDF to get page count and calculate hash
+    const pdfBuffer = await fs.readFile(file.path);
+    const pdfHash = calculateHash(pdfBuffer);
+    
+    // Load PDF to get page count
+    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pageCount = pdfDoc.getPageCount();
+    
+    // Generate a unique document ID
+    const documentId = `doc-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    
+    // Store document metadata in MongoDB with enhanced fields
+    const docRecord = await Document.create({
+      pdfId: documentId,
+      originalHash: pdfHash,
+      originalPdfUrl: `/uploaded-pdfs/${file.filename}`,
+      fileName: file.originalname,      // Store original name
+      fileSize: file.size,              // Store size
+      pageCount: pageCount,             // Store page count
+      createdAt: new Date()
+    });
+
+    console.log(`✅ PDF uploaded successfully:`);
+    console.log(`   Document ID: ${documentId}`);
+    console.log(`   Original Name: ${file.originalname}`);
+    console.log(`   Pages: ${pageCount}`);
+    console.log(`   Size: ${(file.size / 1024).toFixed(2)} KB`);
+    console.log(`   Hash: ${pdfHash.substring(0, 16)}...`);
+    console.log(`   File: ${file.filename}`);
+
+    res.json({
+      success: true,
+      documentId,
+      pdfUrl: `http://localhost:3001/uploaded-pdfs/${file.filename}`,
+      fileName: file.originalname,
+      fileSize: file.size,
+      pageCount,
+      hash: pdfHash,
+      message: 'PDF uploaded successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Error uploading PDF:', error);
+    
+    // Clean up the file if there was an error
+    if (req.file) {
+      try {
+        await fs.unlink(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting file:', unlinkError);
+      }
+    }
+    
+    res.status(500).json({ 
+      error: error.message,
+      details: 'Failed to upload PDF'
+    });
+  }
+});
+
+
+
+// Serve uploaded PDFs statically
+app.use('/uploaded-pdfs', express.static(path.join(__dirname, 'uploaded-pdfs')));
+
+// GET /documents - List all uploaded documents
+app.get('/documents', async (req, res) => {
+  try {
+    const documents = await Document.find()
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .select('pdfId originalHash originalPdfUrl fileName fileSize pageCount createdAt signedAt');
+
+    // Filter out documents with invalid URLs and map to response format
+    const validDocuments = documents
+      .filter(doc => doc.originalPdfUrl && doc.originalPdfUrl.trim() !== '')
+      .map(doc => ({
+        id: doc.pdfId,
+        hash: doc.originalHash,
+        url: doc.originalPdfUrl,
+        fileName: doc.fileName || 'Unknown',
+        fileSize: doc.fileSize || 0,
+        pageCount: doc.pageCount || 0,
+        createdAt: doc.createdAt,
+        signedAt: doc.signedAt,
+        status: doc.signedAt ? 'signed' : 'pending'
+      }));
+
+    res.json({
+      success: true,
+      count: validDocuments.length,
+      documents: validDocuments
+    });
+  } catch (error) {
+    console.error('❌ Error fetching documents:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+app.get('/documents/:documentId/details', async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    
+    const doc = await Document.findOne({ pdfId: documentId });
+    
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    // Get field count for this document
+    const fieldCount = await DocumentField.countDocuments({ document_id: documentId });
+
+    res.json({
+      success: true,
+      document: {
+        id: doc.pdfId,
+        fileName: doc.fileName || 'Unknown',
+        fileSize: doc.fileSize || 0,
+        pageCount: doc.pageCount || 0,
+        hash: doc.originalHash,
+        url: doc.originalPdfUrl,
+        createdAt: doc.createdAt,
+        signedAt: doc.signedAt,
+        status: doc.signedAt ? 'signed' : 'pending',
+        fieldCount: fieldCount
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching document details:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
+// DELETE /documents/:documentId - Delete an uploaded document
+app.delete('/documents/:documentId', async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    
+    // Find the document
+    const doc = await Document.findOne({ pdfId: documentId });
+    
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    console.log(`🗑️  Deleting document: ${documentId}`);
+    console.log(`   File: ${doc.fileName || 'Unknown'}`);
+
+    // Delete associated fields
+    const deletedFields = await DocumentField.deleteMany({ document_id: documentId });
+    console.log(`   Deleted ${deletedFields.deletedCount} fields`);
+
+    // Delete the original PDF file
+    if (doc.originalPdfUrl && doc.originalPdfUrl.startsWith('/uploaded-pdfs/')) {
+      const filename = doc.originalPdfUrl.split('/').pop();
+      const filePath = path.join(__dirname, 'uploaded-pdfs', filename);
+      try {
+        await fs.unlink(filePath);
+        console.log(`   Deleted original PDF: ${filename}`);
+      } catch (err) {
+        console.log('   Original file not found, skipping deletion');
+      }
+    }
+
+    // Delete the signed PDF file if it exists
+    if (doc.signedPdfPath) {
+      try {
+        await fs.unlink(doc.signedPdfPath);
+        console.log(`   Deleted signed PDF`);
+      } catch (err) {
+        console.log('   Signed file not found, skipping deletion');
+      }
+    }
+
+    // Delete the document record
+    await Document.deleteOne({ pdfId: documentId });
+
+    console.log(`✅ Document deleted successfully: ${documentId}`);
+
+    res.json({
+      success: true,
+      message: 'Document and associated files deleted successfully',
+      deletedFields: deletedFields.deletedCount
+    });
+  } catch (error) {
+    console.error('❌ Error deleting document:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add this to the existing /health endpoint response
+// Update the existing /health endpoint to include storage info
+app.get('/health', async (req, res) => {
+  const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  
+  try {
+    // Get storage statistics
+    const uploadedDir = path.join(__dirname, 'uploaded-pdfs');
+    const signedDir = path.join(__dirname, 'signed-pdfs');
+    
+    let uploadedCount = 0;
+    let signedCount = 0;
+    
+    try {
+      const uploadedFiles = await fs.readdir(uploadedDir);
+      uploadedCount = uploadedFiles.length;
+    } catch {}
+    
+    try {
+      const signedFiles = await fs.readdir(signedDir);
+      signedCount = signedFiles.length;
+    } catch {}
+    
+    res.json({ 
+      status: 'healthy', 
+      service: 'BoloForms Signature Engine',
+      mongodb: dbStatus,
+      database: mongoose.connection.name,
+      host: mongoose.connection.host,
+      storage: {
+        uploadedPdfs: uploadedCount,
+        signedPdfs: signedCount
+      }
+    });
+  } catch (error) {
+    res.json({ 
+      status: 'healthy', 
+      service: 'BoloForms Signature Engine',
+      mongodb: dbStatus,
+      database: mongoose.connection.name,
+      host: mongoose.connection.host
+    });
+  }
+});
 
 // GET /fields/:documentId - Get all fields for a document
 app.get('/fields/:documentId', async (req, res) => {
@@ -608,6 +889,235 @@ app.get('/proxy-pdf', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// POST /sign-pdf endpoint (UPDATED)
+app.post('/sign-pdf', async (req, res) => {
+  try {
+    const { pdfId, fields, pdfDimensions, pdfUrl } = req.body;
+    
+    // Validation
+    if (!pdfId) {
+      return res.status(400).json({ error: 'Missing pdfId' });
+    }
+    
+    if (!fields || !Array.isArray(fields)) {
+      return res.status(400).json({ error: 'Missing or invalid fields array' });
+    }
+
+    if (!pdfDimensions || !pdfDimensions.widthPoints || !pdfDimensions.heightPoints) {
+      return res.status(400).json({ 
+        error: 'Missing pdfDimensions (widthPoints and heightPoints required)' 
+      });
+    }
+
+    console.log(`📄 Processing PDF signature for: ${pdfId}`);
+    console.log(`📊 PDF Dimensions: ${pdfDimensions.widthPoints} × ${pdfDimensions.heightPoints} points`);
+    console.log(`📊 Fields to process: ${fields.length}`);
+
+    // Get the PDF buffer
+    const pdfBuffer = await getPdfBuffer(pdfId, pdfUrl);
+    const originalHash = calculateHash(pdfBuffer);
+
+    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    const pages = pdfDoc.getPages();
+
+    let processedCount = 0;
+
+    for (const field of fields) {
+      if (!field.value) {
+        console.log(`⚠️  Skipping empty field: ${field.type}`);
+        continue;
+      }
+
+      const page = pages[field.page - 1] || pages[0];
+      const pageSize = page.getSize();
+      
+      // CRITICAL: Fields now arrive in PDF coordinates (points, bottom-left origin)
+      // No conversion needed - they're already in the right coordinate system!
+      const { x, y, width, height } = field;
+
+      console.log(`Processing ${field.type} at PDF coords: (${x.toFixed(1)}, ${y.toFixed(1)})`);
+
+      switch (field.type) {
+        case 'signature':
+        case 'image':
+          try {
+            const base64Data = field.value.split(',')[1];
+            const imageBuffer = Buffer.from(base64Data, 'base64');
+            
+            let image;
+            try {
+              image = await pdfDoc.embedPng(imageBuffer);
+            } catch {
+              try {
+                image = await pdfDoc.embedJpg(imageBuffer);
+              } catch (err) {
+                console.error('❌ Failed to embed image:', err);
+                continue;
+              }
+            }
+
+            const imageDims = image.scale(1);
+            
+            // Fit image within the field bounds maintaining aspect ratio
+            const fitted = fitImageInBounds(
+              imageDims.width,
+              imageDims.height,
+              width,
+              height
+            );
+
+            // Draw at PDF coordinates (already bottom-left origin)
+            page.drawImage(image, {
+              x: x + fitted.offsetX,
+              y: y + fitted.offsetY,
+              width: fitted.width,
+              height: fitted.height
+            });
+            
+            processedCount++;
+            console.log(`✅ Added ${field.type} at (${x.toFixed(1)}, ${y.toFixed(1)})`);
+          } catch (err) {
+            console.error(`❌ Error processing ${field.type}:`, err);
+          }
+          break;
+
+        case 'text':
+          // For text, we need to position it properly within the field bounds
+          const fontSize = Math.min(12, height * 0.6); // Scale font to field height
+          const textY = y + (height / 2) - (fontSize / 3); // Center vertically
+          
+          page.drawText(field.value || '', {
+            x,
+            y: textY,
+            size: fontSize,
+            color: rgb(0, 0, 0),
+            maxWidth: width
+          });
+          processedCount++;
+          console.log(`✅ Added text at (${x.toFixed(1)}, ${textY.toFixed(1)})`);
+          break;
+
+        case 'date':
+          const dateStr = field.value || new Date().toLocaleDateString();
+          const dateFontSize = Math.min(12, height * 0.6);
+          const dateY = y + (height / 2) - (dateFontSize / 3);
+          
+          page.drawText(dateStr, {
+            x,
+            y: dateY,
+            size: dateFontSize,
+            color: rgb(0, 0, 0)
+          });
+          processedCount++;
+          console.log(`✅ Added date at (${x.toFixed(1)}, ${dateY.toFixed(1)})`);
+          break;
+
+        case 'radio':
+          if (field.value === true) {
+            const centerX = x + width / 2;
+            const centerY = y + height / 2;
+            const radius = Math.min(width, height) / 2 - 2;
+            
+            // Outer circle
+            page.drawCircle({
+              x: centerX,
+              y: centerY,
+              size: radius,
+              borderColor: rgb(0, 0, 0),
+              borderWidth: 2
+            });
+            
+            // Inner filled circle
+            page.drawCircle({
+              x: centerX,
+              y: centerY,
+              size: radius * 0.6,
+              color: rgb(0, 0, 0)
+            });
+            processedCount++;
+            console.log(`✅ Added radio at (${centerX.toFixed(1)}, ${centerY.toFixed(1)})`);
+          }
+          break;
+      }
+    }
+
+    console.log(`✅ Processed ${processedCount} fields`);
+
+    const signedPdfBytes = await pdfDoc.save();
+    const signedBuffer = Buffer.from(signedPdfBytes);
+    const signedHash = calculateHash(signedBuffer);
+
+    // Save to filesystem
+    const outputDir = path.join(__dirname, 'signed-pdfs');
+    await fs.mkdir(outputDir, { recursive: true });
+    
+    const signedFilename = `${pdfId}-signed-${Date.now()}.pdf`;
+    const signedPath = path.join(outputDir, signedFilename);
+    await fs.writeFile(signedPath, signedBuffer);
+
+    // Store audit trail
+    const docRecord = await Document.findOneAndUpdate(
+      { pdfId },
+      {
+        pdfId,
+        originalHash,
+        signedHash,
+        signedAt: new Date(),
+        originalPdfUrl: pdfUrl || null,
+        fields: fields.map(f => ({
+          type: f.type,
+          x: f.x,
+          y: f.y,
+          width: f.width,
+          height: f.height,
+          page: f.page
+        })),
+        signedPdfPath: signedPath
+      },
+      { upsert: true, new: true }
+    );
+
+    console.log(`✅ Document signed successfully!`);
+    console.log(`📊 Audit Record ID: ${docRecord._id}`);
+
+    res.json({
+      success: true,
+      pdfUrl: `/download/${signedFilename}`,
+      originalHash,
+      signedHash,
+      auditId: docRecord._id,
+      processedFields: processedCount,
+      message: 'PDF signed successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Error signing PDF:', error);
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
+// Helper function remains the same
+function fitImageInBounds(imageWidth, imageHeight, boxWidth, boxHeight) {
+  const imageAspect = imageWidth / imageHeight;
+  const boxAspect = boxWidth / boxHeight;
+  
+  let finalWidth, finalHeight, offsetX, offsetY;
+  
+  if (imageAspect > boxAspect) {
+    finalWidth = boxWidth;
+    finalHeight = boxWidth / imageAspect;
+    offsetX = 0;
+    offsetY = (boxHeight - finalHeight) / 2;
+  } else {
+    finalHeight = boxHeight;
+    finalWidth = boxHeight * imageAspect;
+    offsetX = (boxWidth - finalWidth) / 2;
+    offsetY = 0;
+  }
+  
+  return { width: finalWidth, height: finalHeight, offsetX, offsetY };
+}
 
 // ============================================
 // Start Server

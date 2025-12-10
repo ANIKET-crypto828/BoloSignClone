@@ -1,5 +1,6 @@
-// API client for MongoDB backend
-const API_URL = 'http://localhost:3001'; // Changed from 3000 to 3001 to match server.js
+// src/lib/api.ts (UPDATED)
+
+const API_URL = 'http://localhost:3001';
 
 export interface DocumentField {
   id: string;
@@ -15,22 +16,33 @@ export interface DocumentField {
   created_at?: string;
 }
 
+// UPDATED: Now includes PDF dimensions in points
 export interface SignDocumentRequest {
   pdfId: string;
   fields: Array<{
     type: string;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
+    x: number;        // PDF points (bottom-left origin)
+    y: number;        // PDF points (bottom-left origin)
+    width: number;    // PDF points
+    height: number;   // PDF points
     page: number;
     value: string | boolean;
   }>;
   pdfDimensions: {
-    width: number;
-    height: number;
+    widthPoints: number;   // CHANGED: Now requires PDF points
+    heightPoints: number;  // CHANGED: Now requires PDF points
   };
-  pdfUrl?: string; // Optional PDF URL for fetching the original
+  pdfUrl?: string;
+}
+
+export interface SignDocumentResponse {
+  success: boolean;
+  pdfUrl: string;
+  originalHash: string;
+  signedHash: string;
+  auditId: string;
+  processedFields: number;
+  message: string;
 }
 
 // Get all fields for a document
@@ -58,7 +70,10 @@ export async function saveDocumentFields(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ pageNumber, fields }),
   });
-  if (!response.ok) throw new Error('Failed to save fields');
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to save fields: ${error}`);
+  }
 }
 
 // Delete a specific field
@@ -70,13 +85,24 @@ export async function deleteField(fieldId: string): Promise<void> {
 }
 
 // Sign a PDF document
-export async function signPDF(request: SignDocumentRequest) {
+export async function signPDF(request: SignDocumentRequest): Promise<SignDocumentResponse> {
+  console.log('📤 Sending sign request:', {
+    pdfId: request.pdfId,
+    fieldsCount: request.fields.length,
+    pdfDimensions: request.pdfDimensions
+  });
+
   const response = await fetch(`${API_URL}/sign-pdf`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
-  if (!response.ok) throw new Error('Failed to sign PDF');
+  
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to sign PDF: ${error}`);
+  }
+  
   return response.json();
 }
 
@@ -97,11 +123,4 @@ export async function healthCheck() {
 // Proxy external PDF through backend to avoid CORS
 export function getProxiedPdfUrl(externalUrl: string): string {
   return `${API_URL}/proxy-pdf?url=${encodeURIComponent(externalUrl)}`;
-}
-
-// Get base64 encoded PDF
-export async function getSamplePdfBase64() {
-  const response = await fetch(`${API_URL}/sample-pdf-base64`);
-  if (!response.ok) throw new Error('Failed to fetch sample PDF');
-  return response.json();
 }

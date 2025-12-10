@@ -1,7 +1,15 @@
+// src/components/PDFSigner.tsx (Enhanced with Image Support)
+
 import { useState, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import type { DocumentField, FieldValue } from '../types';
 import { getDocumentFields, signPDF } from '../lib/api';
+import { 
+  PdfPageInfo, 
+  percentToScreen, 
+  percentToPdf,
+  extractPageInfo 
+} from '../utils/coords';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -12,12 +20,112 @@ interface PDFSignerProps {
   pdfUrl: string;
 }
 
+const PAGE_WIDTH = 800;
+
+// Image Field Input Component
+function ImageFieldInput({ 
+  field, 
+  value, 
+  onChange 
+}: { 
+  field: DocumentField; 
+  value: string; 
+  onChange: (value: string) => void;
+}) {
+  const [preview, setPreview] = useState<string>(value);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      // Check file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image size must be less than 5MB');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUrl = reader.result as string;
+        setPreview(dataUrl);
+        onChange(dataUrl);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      alert('Please select a valid image file (PNG, JPG, GIF)');
+    }
+  };
+
+  const clearImage = () => {
+    setPreview('');
+    onChange('');
+  };
+
+  return (
+    <div className="space-y-2">
+      {preview ? (
+        <>
+          <img
+            src={preview}
+            alt="Preview"
+            className="w-full h-32 object-contain bg-gray-100 rounded border"
+          />
+          <div className="flex gap-2">
+            <label className="flex-1 cursor-pointer">
+              <span className="block text-center px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm">
+                Change
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={clearImage}
+              className="px-3 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
+            >
+              Remove
+            </button>
+          </div>
+        </>
+      ) : (
+        <label className="block cursor-pointer">
+          <div className="border-2 border-dashed border-gray-300 rounded p-4 text-center hover:border-blue-400 hover:bg-blue-50 transition">
+            <svg
+              className="w-10 h-10 mx-auto text-gray-400 mb-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+              />
+            </svg>
+            <p className="text-sm text-gray-600 font-medium">Upload Image</p>
+            <p className="text-xs text-gray-400 mt-1">PNG, JPG, GIF (max 5MB)</p>
+          </div>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
 export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [fields, setFields] = useState<DocumentField[]>([]);
   const [fieldValues, setFieldValues] = useState<Record<string, FieldValue>>({});
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [pageInfo, setPageInfo] = useState<PdfPageInfo | null>(null);
   const [signerEmail, setSignerEmail] = useState('');
   const [signing, setSigning] = useState(false);
   const [signatureImage, setSignatureImage] = useState<string>('');
@@ -28,19 +136,6 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
   useEffect(() => {
     loadFields();
   }, [documentId]);
-
-  useEffect(() => {
-    const updateSize = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        setContainerSize({ width: rect.width, height: rect.height });
-      }
-    };
-
-    updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
-  }, [currentPage]);
 
   async function loadFields() {
     try {
@@ -53,7 +148,7 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
           initialValues[field.id] = {
             field_id: field.id,
             field_type: field.field_type,
-            value: field.field_type === 'radio' ? false : '',
+            value: field.field_type === 'radio' ? false : ''
           };
         });
         setFieldValues(initialValues);
@@ -67,16 +162,22 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
     setNumPages(numPages);
   }
 
+  function onPageLoadSuccess(page: any) {
+    const info = extractPageInfo(page, PAGE_WIDTH);
+    setPageInfo(info);
+  }
+
   function handleFieldChange(fieldId: string, value: string | boolean) {
     setFieldValues({
       ...fieldValues,
       [fieldId]: {
         ...fieldValues[fieldId],
-        value,
-      },
+        value
+      }
     });
   }
 
+  // Signature canvas functions
   function clearSignature() {
     const canvas = canvasRef.current;
     if (canvas) {
@@ -93,7 +194,7 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
     if (canvas) {
       const dataUrl = canvas.toDataURL('image/png');
       setSignatureImage(dataUrl);
-      alert('Signature saved! You can now submit the document.');
+      alert('Signature saved!');
     }
   }
 
@@ -140,78 +241,73 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
       return;
     }
 
+    if (!pageInfo) {
+      alert('Page info not loaded');
+      return;
+    }
+
+    // Validate required fields
     const requiredFields = fields.filter((f) => f.required && f.field_type !== 'signature');
     for (const field of requiredFields) {
       const value = fieldValues[field.id]?.value;
       if (!value || (typeof value === 'string' && value.trim() === '')) {
-        alert(`Please fill in all required fields: ${field.label || field.field_type}`);
+        alert(`Please fill in: ${field.label || field.field_type}`);
         return;
       }
     }
 
     setSigning(true);
     try {
-      // Get the original PDF URL (extract from proxy URL if needed)
       const originalPdfUrl = pdfUrl.includes('proxy-pdf?url=')
         ? decodeURIComponent(pdfUrl.split('proxy-pdf?url=')[1])
         : pdfUrl;
 
-      console.log('📄 Submitting document with:', {
-        documentId,
-        fieldsCount: fields.length,
-        pdfUrl: originalPdfUrl,
-        containerSize
-      });
-
-      // Convert fields to backend format
       const fieldsForSigning = fields.map((field) => {
         let fieldValue = fieldValues[field.id]?.value || '';
         
-        // Use signature image for signature fields
         if (field.field_type === 'signature') {
           fieldValue = signatureImage;
         }
         
-        // Calculate pixel coordinates from percentages
-        const x = (field.x_percent / 100) * containerSize.width;
-        const y = (field.y_percent / 100) * containerSize.height;
-        const width = (field.width_percent / 100) * containerSize.width;
-        const height = (field.height_percent / 100) * containerSize.height;
+        const pdfRect = percentToPdf(
+          {
+            xPct: field.x_percent,
+            yPct: field.y_percent,
+            widthPct: field.width_percent,
+            heightPct: field.height_percent
+          },
+          pageInfo
+        );
 
         return {
           type: field.field_type,
-          x,
-          y,
-          width,
-          height,
+          x: pdfRect.x,
+          y: pdfRect.y,
+          width: pdfRect.width,
+          height: pdfRect.height,
           page: field.page_number,
-          value: fieldValue,
+          value: fieldValue
         };
       });
-
-      console.log('📝 Fields for signing:', fieldsForSigning);
 
       const result = await signPDF({
         pdfId: documentId,
         fields: fieldsForSigning,
         pdfDimensions: {
-          width: containerSize.width,
-          height: containerSize.height,
+          widthPoints: pageInfo.widthPoints,
+          heightPoints: pageInfo.heightPoints
         },
-        pdfUrl: originalPdfUrl, // Pass the original PDF URL
+        pdfUrl: originalPdfUrl
       });
 
-      console.log('✅ Signing result:', result);
-      
       alert(`Document signed successfully!\n\nProcessed ${result.processedFields} fields.\nAudit ID: ${result.auditId}`);
       
-      // Download the signed PDF
       if (result.pdfUrl) {
         window.open(`http://localhost:3001${result.pdfUrl}`, '_blank');
       }
-    } catch (error) {
-      console.error('❌ Error signing document:', error);
-      alert(`Error signing document: ${error.message}`);
+    } catch (error: any) {
+      console.error('Error signing document:', error);
+      alert(`Error: ${error.message}`);
     } finally {
       setSigning(false);
     }
@@ -222,7 +318,7 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
   return (
     <div className="flex h-screen bg-gray-100">
       <div className="w-80 bg-white p-4 shadow-lg overflow-y-auto">
-        <h2 className="text-xl font-bold mb-4">Fill & Sign Document</h2>
+        <h2 className="text-xl font-bold mb-4">Fill & Sign</h2>
 
         <div className="mb-4">
           <label className="block text-sm font-medium mb-1">Your Email</label>
@@ -242,6 +338,7 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
               {field.label || field.field_type.toUpperCase()}
               {field.required && <span className="text-red-500">*</span>}
             </label>
+            
             {field.field_type === 'text' && (
               <input
                 type="text"
@@ -251,6 +348,7 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
                 required={field.required}
               />
             )}
+            
             {field.field_type === 'date' && (
               <input
                 type="date"
@@ -260,12 +358,21 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
                 required={field.required}
               />
             )}
+            
             {field.field_type === 'radio' && (
               <input
                 type="checkbox"
                 checked={fieldValues[field.id]?.value as boolean || false}
                 onChange={(e) => handleFieldChange(field.id, e.target.checked)}
                 className="w-4 h-4"
+              />
+            )}
+            
+            {field.field_type === 'image' && (
+              <ImageFieldInput
+                field={field}
+                value={fieldValues[field.id]?.value as string || ''}
+                onChange={(value) => handleFieldChange(field.id, value)}
               />
             )}
           </div>
@@ -296,22 +403,20 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
               onClick={saveSignature}
               className="flex-1 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
             >
-              Save Signature
+              Save
             </button>
           </div>
           {signatureImage && (
-            <div className="mt-2 text-xs text-green-600 flex items-center gap-1">
-              ✓ Signature saved
-            </div>
+            <div className="mt-2 text-xs text-green-600">✓ Signature saved</div>
           )}
         </div>
 
         <button
           onClick={submitSignedDocument}
-          disabled={signing}
+          disabled={signing || !pageInfo}
           className="w-full bg-green-500 text-white p-3 rounded hover:bg-green-600 disabled:bg-gray-400 font-medium"
         >
-          {signing ? 'Signing Document...' : 'Submit Signed Document'}
+          {signing ? 'Signing...' : 'Submit Signed Document'}
         </button>
 
         {numPages > 1 && (
@@ -325,9 +430,7 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
               >
                 Previous
               </button>
-              <span>
-                {currentPage} / {numPages}
-              </span>
+              <span>{currentPage} / {numPages}</span>
               <button
                 onClick={() => setCurrentPage(Math.min(numPages, currentPage + 1))}
                 disabled={currentPage === numPages}
@@ -341,29 +444,36 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
       </div>
 
       <div className="flex-1 p-8 overflow-auto">
-        <div className="bg-white shadow-lg mx-auto" style={{ maxWidth: '800px' }}>
+        <div className="bg-white shadow-lg mx-auto" style={{ maxWidth: `${PAGE_WIDTH}px` }}>
           <div ref={containerRef} className="relative">
             <Document file={pdfUrl} onLoadSuccess={onDocumentLoadSuccess}>
-              <Page pageNumber={currentPage} width={800} />
+              <Page 
+                pageNumber={currentPage} 
+                width={PAGE_WIDTH}
+                onLoadSuccess={onPageLoadSuccess}
+              />
             </Document>
 
-            {pageFields.map((field) => {
-              if (!containerSize.width || !containerSize.height) return null;
-
-              const x = (field.x_percent / 100) * containerSize.width;
-              const y = (field.y_percent / 100) * containerSize.height;
-              const width = (field.width_percent / 100) * containerSize.width;
-              const height = (field.height_percent / 100) * containerSize.height;
+            {pageInfo && pageFields.map((field) => {
+              const screenRect = percentToScreen(
+                {
+                  xPct: field.x_percent,
+                  yPct: field.y_percent,
+                  widthPct: field.width_percent,
+                  heightPct: field.height_percent
+                },
+                pageInfo
+              );
 
               return (
                 <div
                   key={field.id}
                   className="absolute border-2 border-blue-400 bg-blue-50 rounded flex items-center justify-center pointer-events-none"
                   style={{
-                    left: `${x}px`,
-                    top: `${y}px`,
-                    width: `${width}px`,
-                    height: `${height}px`,
+                    left: `${screenRect.x}px`,
+                    top: `${screenRect.y}px`,
+                    width: `${screenRect.width}px`,
+                    height: `${screenRect.height}px`
                   }}
                 >
                   <span className="text-xs text-blue-600 font-medium">

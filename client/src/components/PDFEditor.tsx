@@ -3,6 +3,15 @@ import { Document, Page, pdfjs } from 'react-pdf';
 import DraggableField from './DraggableField';
 import type { DocumentField, FieldType } from '../types';
 import { getPageFields, saveDocumentFields, deleteField } from '../lib/api';
+import type { 
+  ScreenRect
+} from '../utils/coords';
+import type { PdfPageInfo } from '../utils/coords';
+import { 
+  percentToScreen, 
+  screenToPercent,
+  extractPageInfo 
+} from '../utils/coords';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -24,45 +33,52 @@ interface PlacedField {
   label: string;
 }
 
+const PAGE_WIDTH = 800; // Fixed width for consistent rendering
+
 export default function PDFEditor({ documentId, pdfUrl, onSave }: PDFEditorProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [placedFields, setPlacedFields] = useState<PlacedField[]>([]);
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [pageInfo, setPageInfo] = useState<PdfPageInfo | null>(null);
   const [saving, setSaving] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    loadFields();
-  }, [documentId, currentPage]);
-
-  useEffect(() => {
-    const updateSize = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        setContainerSize({ width: rect.width, height: rect.height });
-      }
-    };
-
-    updateSize();
-    window.addEventListener('resize', updateSize);
-    return () => window.removeEventListener('resize', updateSize);
-  }, [currentPage]);
+    if (pageInfo) {
+      loadFields();
+    }
+  }, [documentId, currentPage, pageInfo]);
 
   async function loadFields() {
+    if (!pageInfo) return;
+
     try {
       const data = await getPageFields(documentId, currentPage);
 
-      if (data && containerSize.width && containerSize.height) {
-        const fields = data.map((field: DocumentField) => ({
-          id: field.id,
-          type: field.field_type,
-          x: (field.x_percent / 100) * containerSize.width,
-          y: (field.y_percent / 100) * containerSize.height,
-          width: (field.width_percent / 100) * containerSize.width,
-          height: (field.height_percent / 100) * containerSize.height,
-          label: field.label,
-        }));
+      if (data) {
+        const fields = data.map((field: DocumentField) => {
+          // Convert stored percentages to screen coordinates
+          const screenRect = percentToScreen(
+            {
+              xPct: field.x_percent,
+              yPct: field.y_percent,
+              widthPct: field.width_percent,
+              heightPct: field.height_percent
+            },
+            pageInfo
+          );
+
+          return {
+            id: field.id,
+            type: field.field_type,
+            x: screenRect.x,
+            y: screenRect.y,
+            width: screenRect.width,
+            height: screenRect.height,
+            label: field.label
+          };
+        });
+        
         setPlacedFields(fields);
       }
     } catch (error) {
@@ -74,10 +90,17 @@ export default function PDFEditor({ documentId, pdfUrl, onSave }: PDFEditorProps
     setNumPages(numPages);
   }
 
+  function onPageLoadSuccess(page: any) {
+    // Extract page dimensions and scale info
+    const info = extractPageInfo(page, PAGE_WIDTH);
+    setPageInfo(info);
+    console.log('Page info:', info);
+  }
+
   function handleDrop(type: FieldType, e: React.DragEvent) {
     e.preventDefault();
     const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
+    if (!rect || !pageInfo) return;
 
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -89,7 +112,7 @@ export default function PDFEditor({ documentId, pdfUrl, onSave }: PDFEditorProps
       y,
       width: 150,
       height: 60,
-      label: '',
+      label: ''
     };
 
     setPlacedFields([...placedFields, newField]);
@@ -112,7 +135,6 @@ export default function PDFEditor({ documentId, pdfUrl, onSave }: PDFEditorProps
   }
 
   async function handleDelete(id: string) {
-    // Only delete from backend if it's not a temporary field
     if (!id.startsWith('temp-')) {
       try {
         await deleteField(id);
@@ -126,28 +148,42 @@ export default function PDFEditor({ documentId, pdfUrl, onSave }: PDFEditorProps
   }
 
   async function saveFields() {
-    if (!containerSize.width || !containerSize.height) return;
+    if (!pageInfo) {
+      alert('Page info not loaded yet');
+      return;
+    }
 
     setSaving(true);
     try {
-      const fieldsToSave = placedFields.map((field) => ({
-        document_id: documentId,
-        field_type: field.type,
-        page_number: currentPage,
-        x_percent: (field.x / containerSize.width) * 100,
-        y_percent: (field.y / containerSize.height) * 100,
-        width_percent: (field.width / containerSize.width) * 100,
-        height_percent: (field.height / containerSize.height) * 100,
-        label: field.label,
-        required: true,
-      }));
+      // Convert screen coordinates to percentages for storage
+      const fieldsToSave = placedFields.map((field) => {
+        const screenRect: ScreenRect = {
+          x: field.x,
+          y: field.y,
+          width: field.width,
+          height: field.height
+        };
+
+        const percent = screenToPercent(screenRect, pageInfo);
+
+        return {
+          document_id: documentId,
+          field_type: field.type,
+          page_number: currentPage,
+          x_percent: percent.xPct,
+          y_percent: percent.yPct,
+          width_percent: percent.widthPct,
+          height_percent: percent.heightPct,
+          label: field.label,
+          required: true
+        };
+      });
 
       await saveDocumentFields(documentId, currentPage, fieldsToSave);
 
       alert('Fields saved successfully!');
       if (onSave) onSave();
       
-      // Reload fields to get proper IDs from backend
       await loadFields();
     } catch (error) {
       console.error('Error saving fields:', error);
@@ -161,6 +197,15 @@ export default function PDFEditor({ documentId, pdfUrl, onSave }: PDFEditorProps
     <div className="flex h-screen bg-gray-100">
       <div className="w-64 bg-white p-4 shadow-lg overflow-y-auto">
         <h2 className="text-xl font-bold mb-4">Field Toolbox</h2>
+        
+        {pageInfo && (
+          <div className="mb-4 p-2 bg-gray-100 rounded text-xs">
+            <div>PDF: {pageInfo.widthPoints.toFixed(0)} × {pageInfo.heightPoints.toFixed(0)} pts</div>
+            <div>Screen: {pageInfo.widthPixels.toFixed(0)} × {pageInfo.heightPixels.toFixed(0)} px</div>
+            <div>Scale: {pageInfo.scale.toFixed(2)}</div>
+          </div>
+        )}
+
         <div className="space-y-2">
           {(['signature', 'text', 'image', 'date', 'radio'] as FieldType[]).map((type) => (
             <div
@@ -175,15 +220,17 @@ export default function PDFEditor({ documentId, pdfUrl, onSave }: PDFEditorProps
             </div>
           ))}
         </div>
+
         <div className="mt-6">
           <button
             onClick={saveFields}
-            disabled={saving}
+            disabled={saving || !pageInfo}
             className="w-full bg-green-500 text-white p-3 rounded hover:bg-green-600 disabled:bg-gray-400"
           >
             {saving ? 'Saving...' : 'Save Fields'}
           </button>
         </div>
+
         {numPages > 1 && (
           <div className="mt-6">
             <h3 className="font-bold mb-2">Pages</h3>
@@ -211,7 +258,7 @@ export default function PDFEditor({ documentId, pdfUrl, onSave }: PDFEditorProps
       </div>
 
       <div className="flex-1 p-8 overflow-auto">
-        <div className="bg-white shadow-lg mx-auto" style={{ maxWidth: '800px' }}>
+        <div className="bg-white shadow-lg mx-auto" style={{ maxWidth: `${PAGE_WIDTH}px` }}>
           <div
             ref={containerRef}
             className="relative"
@@ -222,7 +269,11 @@ export default function PDFEditor({ documentId, pdfUrl, onSave }: PDFEditorProps
             onDragOver={(e) => e.preventDefault()}
           >
             <Document file={pdfUrl} onLoadSuccess={onDocumentLoadSuccess}>
-              <Page pageNumber={currentPage} width={800} />
+              <Page 
+                pageNumber={currentPage} 
+                width={PAGE_WIDTH}
+                onLoadSuccess={onPageLoadSuccess}
+              />
             </Document>
 
             {placedFields.map((field) => (
