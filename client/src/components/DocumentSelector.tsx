@@ -29,7 +29,7 @@ export default function DocumentSelector({ onDocumentSelect }: DocumentSelectorP
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:3001/documents');
+      const response = await fetch('https://bolosignclone-backend.onrender.com/documents');
       if (!response.ok) {
         throw new Error('Failed to load documents');
       }
@@ -40,7 +40,7 @@ export default function DocumentSelector({ onDocumentSelect }: DocumentSelectorP
         .filter((doc: any) => doc.url) // Filter out documents with null URLs
         .map((doc: any) => ({
           documentId: doc.id,
-          pdfUrl: `http://localhost:3001${doc.url}`,
+          pdfUrl: `https://bolosignclone-backend.onrender.com${doc.url}`,
           fileName: doc.fileName || doc.url?.split('/').pop() || 'Unknown',
           pageCount: doc.pageCount || 0,
           fileSize: doc.fileSize || 0,
@@ -66,7 +66,7 @@ export default function DocumentSelector({ onDocumentSelect }: DocumentSelectorP
 
     setDeleting(documentId);
     try {
-      const response = await fetch(`http://localhost:3001/documents/${documentId}`, {
+      const response = await fetch(`https://bolosignclone-backend.onrender.com/documents/${documentId}`, {
         method: 'DELETE'
       });
       

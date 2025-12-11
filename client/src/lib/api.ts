@@ -1,6 +1,6 @@
-// src/lib/api.ts (UPDATED)
 
-const API_URL = 'http://localhost:3001';
+
+const API_URL = 'https://bolosignclone-backend.onrender.com';
 
 export interface DocumentField {
   id: string;
@@ -16,7 +16,7 @@ export interface DocumentField {
   created_at?: string;
 }
 
-// UPDATED: Now includes PDF dimensions in points
+//  PDF dimensions in points
 export interface SignDocumentRequest {
   pdfId: string;
   fields: Array<{

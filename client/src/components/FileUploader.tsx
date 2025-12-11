@@ -63,7 +63,7 @@ function FileUploader({ onFileUpload }: FileUploaderProps) {
       const formData = new FormData();
       formData.append('pdf', file);
 
-      const response = await fetch('http://localhost:3001/upload-pdf', {
+      const response = await fetch('https://bolosignclone-backend.onrender.com/upload-pdf', {
         method: 'POST',
         body: formData,
       });

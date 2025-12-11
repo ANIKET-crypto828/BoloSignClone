@@ -11,7 +11,7 @@ export interface DocumentField {
   height_percent: number;
   label: string;
   required: boolean;
-  created_at?: string; // Make optional to handle cases where it might be undefined
+  created_at?: string; 
 }
 
 export interface Document {
