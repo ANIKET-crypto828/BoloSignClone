@@ -301,7 +301,7 @@ export default function PDFSigner({ documentId, pdfUrl }: PDFSignerProps) {
       alert(`Document signed successfully!\n\nProcessed ${result.processedFields} fields.\nAudit ID: ${result.auditId}`);
       
       if (result.pdfUrl) {
-        window.open(`http://localhost:3001${result.pdfUrl}`, '_blank');
+        window.open(`https://bolosignclone-backend.onrender.com${result.pdfUrl}`, '_blank');
       }
     } catch (error: any) {
       console.error('Error signing document:', error);

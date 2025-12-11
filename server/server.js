@@ -102,19 +102,19 @@ mongoose.connect(MONGODB_URI, {
   socketTimeoutMS: 45000,
 })
 .then(() => {
-  console.log('✅ MongoDB Connected Successfully');
-  console.log(`📂 Database: ${mongoose.connection.name}`);
-  console.log(`🌐 Host: ${mongoose.connection.host}`);
+  console.log(' MongoDB Connected Successfully');
+  console.log(` Database: ${mongoose.connection.name}`);
+  console.log(` Host: ${mongoose.connection.host}`);
   
   if (MONGODB_URI.includes('mongodb+srv')) {
-    console.log('☁️  Using MongoDB Atlas (Cloud)');
+    console.log('  Using MongoDB Atlas (Cloud)');
   } else {
-    console.log('💻 Using Local MongoDB');
+    console.log(' Using Local MongoDB');
   }
 })
 .catch(err => {
-  console.error('❌ MongoDB Connection Error:', err.message);
-  console.error('💡 Troubleshooting:');
+  console.error(' MongoDB Connection Error:', err.message);
+  console.error(' Troubleshooting:');
   console.error('   1. Check your .env file exists in backend folder');
   console.error('   2. Verify MONGODB_URI is correct');
   console.error('   3. Check MongoDB Atlas Network Access (IP whitelist)');
@@ -124,20 +124,20 @@ mongoose.connect(MONGODB_URI, {
 });
 
 mongoose.connection.on('error', err => {
-  console.error('❌ MongoDB Error:', err.message);
+  console.error(' MongoDB Error:', err.message);
 });
 
 mongoose.connection.on('disconnected', () => {
-  console.log('⚠️  MongoDB Disconnected - Will attempt to reconnect...');
+  console.log('  MongoDB Disconnected - Will attempt to reconnect...');
 });
 
 mongoose.connection.on('reconnected', () => {
-  console.log('✅ MongoDB Reconnected Successfully');
+  console.log(' MongoDB Reconnected Successfully');
 });
 
 process.on('SIGINT', async () => {
   await mongoose.connection.close();
-  console.log('👋 MongoDB connection closed due to app termination');
+  console.log(' MongoDB connection closed due to app termination');
   process.exit(0);
 });
 
@@ -177,12 +177,12 @@ async function getPdfBuffer(pdfId, pdfUrl) {
   // Try to load from cache first
   try {
     const buffer = await fs.readFile(cachedPath);
-    console.log(`📄 Loaded PDF from cache: ${pdfId}`);
+    console.log(` Loaded PDF from cache: ${pdfId}`);
     return buffer;
   } catch (err) {
     // Not in cache, try to fetch from URL
     if (pdfUrl) {
-      console.log(`🌐 Fetching PDF from URL: ${pdfUrl}`);
+      console.log(` Fetching PDF from URL: ${pdfUrl}`);
       try {
         const response = await fetch(pdfUrl);
         if (!response.ok) {
@@ -194,17 +194,17 @@ async function getPdfBuffer(pdfId, pdfUrl) {
         // Cache it for future use
         await fs.mkdir(path.dirname(cachedPath), { recursive: true });
         await fs.writeFile(cachedPath, buffer);
-        console.log(`✅ PDF cached successfully: ${pdfId}`);
+        console.log(` PDF cached successfully: ${pdfId}`);
         
         return buffer;
       } catch (fetchErr) {
-        console.error('❌ Failed to fetch PDF:', fetchErr);
+        console.error(' Failed to fetch PDF:', fetchErr);
         throw fetchErr;
       }
     }
     
     // If no URL provided, create a sample PDF
-    console.log('⚠️  No PDF found, creating sample...');
+    console.log('  No PDF found, creating sample...');
     const samplePdf = await PDFDocument.create();
     const page = samplePdf.addPage([595.28, 841.89]);
     page.drawText('EMPLOYMENT CONTRACT', {
@@ -263,7 +263,7 @@ app.post('/upload-pdf', upload.single('pdf'), async (req, res) => {
       createdAt: new Date()
     });
 
-    console.log(`✅ PDF uploaded successfully:`);
+    console.log(` PDF uploaded successfully:`);
     console.log(`   Document ID: ${documentId}`);
     console.log(`   Original Name: ${file.originalname}`);
     console.log(`   Pages: ${pageCount}`);
@@ -283,7 +283,7 @@ app.post('/upload-pdf', upload.single('pdf'), async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error uploading PDF:', error);
+    console.error(' Error uploading PDF:', error);
     
     // Clean up the file if there was an error
     if (req.file) {
@@ -335,7 +335,7 @@ app.get('/documents', async (req, res) => {
       documents: validDocuments
     });
   } catch (error) {
-    console.error('❌ Error fetching documents:', error);
+    console.error(' Error fetching documents:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -370,7 +370,7 @@ app.get('/documents/:documentId/details', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('❌ Error fetching document details:', error);
+    console.error(' Error fetching document details:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -421,7 +421,7 @@ app.delete('/documents/:documentId', async (req, res) => {
     // Delete the document record
     await Document.deleteOne({ pdfId: documentId });
 
-    console.log(`✅ Document deleted successfully: ${documentId}`);
+    console.log(` Document deleted successfully: ${documentId}`);
 
     res.json({
       success: true,
@@ -429,7 +429,7 @@ app.delete('/documents/:documentId', async (req, res) => {
       deletedFields: deletedFields.deletedCount
     });
   } catch (error) {
-    console.error('❌ Error deleting document:', error);
+    console.error(' Error deleting document:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -506,7 +506,7 @@ app.get('/fields/:documentId', async (req, res) => {
       created_at: field.created_at
     })));
   } catch (error) {
-    console.error('❌ Error fetching fields:', error);
+    console.error(' Error fetching fields:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -544,7 +544,7 @@ app.post('/fields/:documentId', async (req, res) => {
       await DocumentField.insertMany(fieldsToInsert);
     }
 
-    console.log(`✅ Saved ${fieldsToInsert.length} fields for document ${documentId}, page ${pageNumber}`);
+    console.log(` Saved ${fieldsToInsert.length} fields for document ${documentId}, page ${pageNumber}`);
 
     res.json({ 
       success: true, 
@@ -552,7 +552,7 @@ app.post('/fields/:documentId', async (req, res) => {
       count: fieldsToInsert.length 
     });
   } catch (error) {
-    console.error('❌ Error saving fields:', error);
+    console.error(' Error saving fields:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -568,14 +568,14 @@ app.delete('/fields/delete/:fieldId', async (req, res) => {
       return res.status(404).json({ error: 'Field not found' });
     }
 
-    console.log(`✅ Deleted field ${fieldId}`);
+    console.log(` Deleted field ${fieldId}`);
 
     res.json({ 
       success: true, 
       message: 'Field deleted successfully' 
     });
   } catch (error) {
-    console.error('❌ Error deleting field:', error);
+    console.error(' Error deleting field:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -598,13 +598,13 @@ app.post('/sign-pdf', async (req, res) => {
       return res.status(400).json({ error: 'Missing or invalid fields array' });
     }
 
-    console.log(`📄 Processing PDF signature for: ${pdfId}`);
-    console.log(`📊 Fields to process: ${fields.length}`);
+    console.log(` Processing PDF signature for: ${pdfId}`);
+    console.log(` Fields to process: ${fields.length}`);
 
     // Get the PDF buffer (from cache or URL)
     const pdfBuffer = await getPdfBuffer(pdfId, pdfUrl);
     const originalHash = calculateHash(pdfBuffer);
-    console.log(`🔒 Original PDF Hash: ${originalHash.substring(0, 16)}...`);
+    console.log(` Original PDF Hash: ${originalHash.substring(0, 16)}...`);
 
     const pdfDoc = await PDFDocument.load(pdfBuffer);
     const pages = pdfDoc.getPages();
@@ -613,7 +613,7 @@ app.post('/sign-pdf', async (req, res) => {
     let processedCount = 0;
     for (const field of fields) {
       if (!field.value) {
-        console.log(`⚠️  Skipping empty field: ${field.type}`);
+        console.log(`  Skipping empty field: ${field.type}`);
         continue;
       }
 
@@ -634,7 +634,7 @@ app.post('/sign-pdf', async (req, res) => {
               try {
                 image = await pdfDoc.embedJpg(imageBuffer);
               } catch (err) {
-                console.error('❌ Failed to embed image:', err);
+                console.error(' Failed to embed image:', err);
                 continue;
               }
             }
@@ -654,9 +654,9 @@ app.post('/sign-pdf', async (req, res) => {
               height: fitted.height
             });
             processedCount++;
-            console.log(`✅ Added ${field.type} at (${x.toFixed(1)}, ${y.toFixed(1)})`);
+            console.log(` Added ${field.type} at (${x.toFixed(1)}, ${y.toFixed(1)})`);
           } catch (err) {
-            console.error(`❌ Error processing ${field.type}:`, err);
+            console.error(` Error processing ${field.type}:`, err);
           }
           break;
 
@@ -702,7 +702,7 @@ app.post('/sign-pdf', async (req, res) => {
       }
     }
 
-    console.log(`✅ Processed ${processedCount} fields`);
+    console.log(` Processed ${processedCount} fields`);
 
     const signedPdfBytes = await pdfDoc.save();
     const signedBuffer = Buffer.from(signedPdfBytes);
@@ -739,8 +739,8 @@ app.post('/sign-pdf', async (req, res) => {
       { upsert: true, new: true }
     );
 
-    console.log(`✅ Document signed successfully!`);
-    console.log(`📊 Audit Record ID: ${docRecord._id}`);
+    console.log(` Document signed successfully!`);
+    console.log(` Audit Record ID: ${docRecord._id}`);
 
     res.json({
       success: true,
@@ -753,7 +753,7 @@ app.post('/sign-pdf', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error signing PDF:', error);
+    console.error(' Error signing PDF:', error);
     res.status(500).json({ error: error.message, stack: error.stack });
   }
 });
@@ -866,7 +866,7 @@ app.get('/proxy-pdf', async (req, res) => {
       return res.status(400).json({ error: 'URL parameter is required' });
     }
 
-    console.log(`📥 Proxying PDF from: ${url}`);
+    console.log(` Proxying PDF from: ${url}`);
 
     const response = await fetch(url);
     
@@ -882,10 +882,10 @@ app.get('/proxy-pdf', async (req, res) => {
     res.setHeader('Content-Length', buffer.length);
     res.send(buffer);
     
-    console.log(`✅ PDF proxied successfully (${buffer.length} bytes)`);
+    console.log(` PDF proxied successfully (${buffer.length} bytes)`);
     
   } catch (error) {
-    console.error('❌ Error proxying PDF:', error);
+    console.error(' Error proxying PDF:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -910,9 +910,9 @@ app.post('/sign-pdf', async (req, res) => {
       });
     }
 
-    console.log(`📄 Processing PDF signature for: ${pdfId}`);
-    console.log(`📊 PDF Dimensions: ${pdfDimensions.widthPoints} × ${pdfDimensions.heightPoints} points`);
-    console.log(`📊 Fields to process: ${fields.length}`);
+    console.log(` Processing PDF signature for: ${pdfId}`);
+    console.log(` PDF Dimensions: ${pdfDimensions.widthPoints} × ${pdfDimensions.heightPoints} points`);
+    console.log(` Fields to process: ${fields.length}`);
 
     // Get the PDF buffer
     const pdfBuffer = await getPdfBuffer(pdfId, pdfUrl);
@@ -925,7 +925,7 @@ app.post('/sign-pdf', async (req, res) => {
 
     for (const field of fields) {
       if (!field.value) {
-        console.log(`⚠️  Skipping empty field: ${field.type}`);
+        console.log(`  Skipping empty field: ${field.type}`);
         continue;
       }
 
@@ -952,7 +952,7 @@ app.post('/sign-pdf', async (req, res) => {
               try {
                 image = await pdfDoc.embedJpg(imageBuffer);
               } catch (err) {
-                console.error('❌ Failed to embed image:', err);
+                console.error(' Failed to embed image:', err);
                 continue;
               }
             }
@@ -976,9 +976,9 @@ app.post('/sign-pdf', async (req, res) => {
             });
             
             processedCount++;
-            console.log(`✅ Added ${field.type} at (${x.toFixed(1)}, ${y.toFixed(1)})`);
+            console.log(` Added ${field.type} at (${x.toFixed(1)}, ${y.toFixed(1)})`);
           } catch (err) {
-            console.error(`❌ Error processing ${field.type}:`, err);
+            console.error(` Error processing ${field.type}:`, err);
           }
           break;
 
@@ -995,7 +995,7 @@ app.post('/sign-pdf', async (req, res) => {
             maxWidth: width
           });
           processedCount++;
-          console.log(`✅ Added text at (${x.toFixed(1)}, ${textY.toFixed(1)})`);
+          console.log(` Added text at (${x.toFixed(1)}, ${textY.toFixed(1)})`);
           break;
 
         case 'date':
@@ -1010,7 +1010,7 @@ app.post('/sign-pdf', async (req, res) => {
             color: rgb(0, 0, 0)
           });
           processedCount++;
-          console.log(`✅ Added date at (${x.toFixed(1)}, ${dateY.toFixed(1)})`);
+          console.log(` Added date at (${x.toFixed(1)}, ${dateY.toFixed(1)})`);
           break;
 
         case 'radio':
@@ -1036,13 +1036,13 @@ app.post('/sign-pdf', async (req, res) => {
               color: rgb(0, 0, 0)
             });
             processedCount++;
-            console.log(`✅ Added radio at (${centerX.toFixed(1)}, ${centerY.toFixed(1)})`);
+            console.log(` Added radio at (${centerX.toFixed(1)}, ${centerY.toFixed(1)})`);
           }
           break;
       }
     }
 
-    console.log(`✅ Processed ${processedCount} fields`);
+    console.log(` Processed ${processedCount} fields`);
 
     const signedPdfBytes = await pdfDoc.save();
     const signedBuffer = Buffer.from(signedPdfBytes);
@@ -1078,8 +1078,8 @@ app.post('/sign-pdf', async (req, res) => {
       { upsert: true, new: true }
     );
 
-    console.log(`✅ Document signed successfully!`);
-    console.log(`📊 Audit Record ID: ${docRecord._id}`);
+    console.log(` Document signed successfully!`);
+    console.log(` Audit Record ID: ${docRecord._id}`);
 
     res.json({
       success: true,
@@ -1092,7 +1092,7 @@ app.post('/sign-pdf', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error signing PDF:', error);
+    console.error(' Error signing PDF:', error);
     res.status(500).json({ error: error.message, stack: error.stack });
   }
 });
@@ -1123,14 +1123,13 @@ function fitImageInBounds(imageWidth, imageHeight, boxWidth, boxHeight) {
 // Start Server
 // ============================================
 
-const PORT = process.env.PORT || 3001;
+//const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {
   console.log('');
   console.log('='.repeat(60));
-  console.log(`🚀 BoloForms Signature Engine`);
+  console.log(` BoloForms Signature Engine`);
   console.log('='.repeat(60));
-  console.log(`📡 Server running on: http://localhost:${PORT}`);
   console.log('');
   console.log('📋 Available Endpoints:');
   console.log(`   GET    /fields/:documentId     - Get document fields`);
@@ -1147,3 +1146,5 @@ app.listen(PORT, () => {
   console.log('='.repeat(60));
   console.log('');
 });
+
+//console.log(` Server running on: http://localhost:${PORT}`);

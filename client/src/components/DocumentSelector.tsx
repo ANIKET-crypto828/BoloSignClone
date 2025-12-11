@@ -1,5 +1,7 @@
-// src/components/DocumentSelector.tsx
+
 import { useState, useEffect } from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { fas } from '@fortawesome/free-solid-svg-icons';
 
 interface Document {
   documentId: string;
@@ -20,6 +22,10 @@ export default function DocumentSelector({ onDocumentSelect }: DocumentSelectorP
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+
+  const byPrefixAndName = {
+    fas: fas,
+  };
 
   useEffect(() => {
     loadDocuments();
@@ -119,7 +125,7 @@ export default function DocumentSelector({ onDocumentSelect }: DocumentSelectorP
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-8">
         <div className="bg-white rounded-xl shadow-xl p-8 max-w-md w-full">
           <div className="text-center">
-            <div className="text-5xl mb-4">❌</div>
+            <div className="text-5xl mb-4"><FontAwesomeIcon icon={byPrefixAndName.fas['xmark']} /></div>
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Error Loading Documents</h2>
             <p className="text-gray-600 mb-6">{error}</p>
             <button
@@ -196,7 +202,7 @@ export default function DocumentSelector({ onDocumentSelect }: DocumentSelectorP
                           : 'bg-yellow-100 text-yellow-800'
                       }`}
                     >
-                      {doc.status === 'signed' ? '✓ Signed' : '⏳ Pending'}
+                      {doc.status === 'signed' ? '✓ Signed' : ' Pending'}
                     </span>
                   </div>
 
@@ -236,7 +242,7 @@ export default function DocumentSelector({ onDocumentSelect }: DocumentSelectorP
                       disabled={deleting === doc.documentId}
                       className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition font-medium text-sm disabled:opacity-50"
                     >
-                      {deleting === doc.documentId ? '...' : '🗑️'}
+                      {deleting === doc.documentId ? '...' : 'Delete'}
                     </button>
                   </div>
                 </div>
@@ -251,7 +257,8 @@ export default function DocumentSelector({ onDocumentSelect }: DocumentSelectorP
             onClick={loadDocuments}
             className="px-6 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 shadow-lg font-medium"
           >
-            🔄 Refresh List
+            <FontAwesomeIcon icon={byPrefixAndName.fas['rotate']} />
+             Refresh List
           </button>
         </div>
       </div>

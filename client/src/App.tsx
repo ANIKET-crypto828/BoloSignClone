@@ -3,11 +3,17 @@ import PDFEditor from './components/PDFEditor';
 import PDFSigner from './components/PDFSigner';
 import { FileUploader } from './components/FileUploader';
 import DocumentSelector from './components/DocumentSelector';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { fas } from '@fortawesome/free-solid-svg-icons';
 
 function App() {
   const [mode, setMode] = useState<'upload' | 'select' | 'editor' | 'signer'>('select');
   const [documentId, setDocumentId] = useState<string>('');
   const [pdfUrl, setPdfUrl] = useState<string>('');
+
+  const byPrefixAndName = {
+  fas: fas,
+};
 
   const handleFileUpload = (result: any) => {
     setDocumentId(result.documentId);
@@ -49,7 +55,8 @@ function App() {
               mode === 'editor' ? 'bg-white text-blue-600' : 'bg-blue-500'
             } disabled:opacity-50 disabled:cursor-not-allowed`}
           >
-            ✏️ Editor
+            <FontAwesomeIcon icon={byPrefixAndName.fas['spell-check']} />
+             Editor
           </button>
           <button
             onClick={() => setMode('signer')}
@@ -58,7 +65,8 @@ function App() {
               mode === 'signer' ? 'bg-white text-blue-600' : 'bg-blue-500'
             } disabled:opacity-50 disabled:cursor-not-allowed`}
           >
-            ✍️ Signer
+            <FontAwesomeIcon icon={byPrefixAndName.fas['signature']} />
+             Signer
           </button>
         </div>
       </div>
