@@ -1,9 +1,9 @@
-/**
- * Complete coordinate conversion system for PDF signature injection
- * Handles the transformation between:
- * - PDF coordinates (points, bottom-left origin)
- * - Screen coordinates (pixels, top-left origin)
- * - Percentage coordinates (0-100%, resolution-agnostic)
+/*
+  Complete coordinate conversion system for PDF signature injection
+  Handles the transformation between:
+  - PDF coordinates (points, bottom-left origin)
+  - Screen coordinates (pixels, top-left origin)
+  - Percentage coordinates (0-100%, resolution-agnostic)
  */
 
 // Type definitions
@@ -37,8 +37,8 @@ export type PercentRect = {
   heightPct: number; // 0-100%
 };
 
-/**
- * Convert screen coordinates (top-left origin) to PDF points (bottom-left origin)
+/*
+  Convert screen coordinates (top-left origin) to PDF points (bottom-left origin)
  */
 export function screenToPdf(screen: ScreenRect, pageInfo: PdfPageInfo): PdfRect {
   const { widthPoints, heightPoints, widthPixels, heightPixels } = pageInfo;
@@ -61,8 +61,8 @@ export function screenToPdf(screen: ScreenRect, pageInfo: PdfPageInfo): PdfRect 
   };
 }
 
-/**
- * Convert PDF points (bottom-left origin) to screen pixels (top-left origin)
+/*
+  Convert PDF points (bottom-left origin) to screen pixels (top-left origin)
  */
 export function pdfToScreen(pdf: PdfRect, pageInfo: PdfPageInfo): ScreenRect {
   const { widthPoints, heightPoints, widthPixels, heightPixels } = pageInfo;
@@ -84,8 +84,8 @@ export function pdfToScreen(pdf: PdfRect, pageInfo: PdfPageInfo): ScreenRect {
   };
 }
 
-/**
- * Convert screen coordinates to percentage (resolution-agnostic storage)
+/*
+  Convert screen coordinates to percentage (resolution-agnostic storage)
  */
 export function screenToPercent(screen: ScreenRect, pageInfo: PdfPageInfo): PercentRect {
   const { widthPixels, heightPixels } = pageInfo;
@@ -106,8 +106,8 @@ export function screenToPercent(screen: ScreenRect, pageInfo: PdfPageInfo): Perc
   };
 }
 
-/**
- * Convert percentage to screen coordinates
+/*
+  Convert percentage to screen coordinates
  */
 export function percentToScreen(percent: PercentRect, pageInfo: PdfPageInfo): ScreenRect {
   const { widthPixels, heightPixels } = pageInfo;
@@ -123,8 +123,8 @@ export function percentToScreen(percent: PercentRect, pageInfo: PdfPageInfo): Sc
   return { x, y, width, height };
 }
 
-/**
- * Convert percentage directly to PDF points (for backend)
+/*
+  Convert percentage directly to PDF points (for backend)
  */
 export function percentToPdf(percent: PercentRect, pageInfo: PdfPageInfo): PdfRect {
   const { widthPoints, heightPoints } = pageInfo;
@@ -137,8 +137,8 @@ export function percentToPdf(percent: PercentRect, pageInfo: PdfPageInfo): PdfRe
   };
 }
 
-/**
- * Convert PDF points to percentage (for storage)
+/*
+  Convert PDF points to percentage (for storage)
  */
 export function pdfToPercent(pdf: PdfRect, pageInfo: PdfPageInfo): PercentRect {
   const { widthPoints, heightPoints } = pageInfo;
@@ -151,8 +151,8 @@ export function pdfToPercent(pdf: PdfRect, pageInfo: PdfPageInfo): PercentRect {
   };
 }
 
-/**
- * Extract PDF page info from react-pdf Page component
+/*
+  Extract PDF page info from react-pdf Page component
  */
 export function extractPageInfo(
   page: any, // PDFPageProxy from pdfjs

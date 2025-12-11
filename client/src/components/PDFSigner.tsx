@@ -1,4 +1,3 @@
-// src/components/PDFSigner.tsx (Enhanced with Image Support)
 
 import { useState, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
