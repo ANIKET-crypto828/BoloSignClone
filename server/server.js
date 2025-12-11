@@ -274,7 +274,7 @@ app.post('/upload-pdf', upload.single('pdf'), async (req, res) => {
     res.json({
       success: true,
       documentId,
-      pdfUrl: `http://localhost:3001/uploaded-pdfs/${file.filename}`,
+      pdfUrl: `https://bolosignclone-backend.onrender.com/uploaded-pdfs/${file.filename}`,
       fileName: file.originalname,
       fileSize: file.size,
       pageCount,
