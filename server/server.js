@@ -1125,13 +1125,13 @@ function fitImageInBounds(imageWidth, imageHeight, boxWidth, boxHeight) {
 
 //const PORT = process.env.PORT || 3001;
 
-app.listen(PORT, () => {
+app.listen( () => {
   console.log('');
   console.log('='.repeat(60));
   console.log(` BoloForms Signature Engine`);
   console.log('='.repeat(60));
   console.log('');
-  console.log('📋 Available Endpoints:');
+  console.log(' Available Endpoints:');
   console.log(`   GET    /fields/:documentId     - Get document fields`);
   console.log(`   POST   /fields/:documentId     - Save document fields`);
   console.log(`   DELETE /fields/delete/:fieldId - Delete field`);
